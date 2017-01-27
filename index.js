@@ -1,22 +1,23 @@
 const shelljs = require('shelljs');
 const fs = require('fs');
 const path = require('path');
-const ss = require('socket.io-stream');
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
+const ss = require('socket.io-stream');
+const debug = require('debug')('talking-stock:debug');
+const info = require('debug')('talking-stock:info');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
 const Fetch = require('./fetch');
-const Cli = require('./cli');
+// const Cli = require('./cli');
 
 const defaultSymbols = [
   'NASDAQ:AMD',
   'NASDAQ:AMBA',
-  'LSE:BKY',
   'NASDAQ:ETRM',
   'NYSEMKT:MSTX',
   'NASDAQ:NVDA',
@@ -30,7 +31,7 @@ const fetch = new Fetch({ defaultSymbols });
 const STATIC = {
   welcomeMessage: 'Welcome to the talking stock! Please stay tuned bro!',
   port: 4567,
-  fetchTimeout: 10000,
+  fetchTimeout: 15000,
   fetchErrorTimeout: 60000,
   cacheFolder: `${__dirname}/_cache`,
   sayIsAvailable: shelljs.which('say'),
@@ -49,22 +50,28 @@ if (!fs.existsSync(STATIC.cacheFolder)) {
 const transmitAudio = (message = 'Undefined message', rate = 200, recipient = false) => {
   if (!STATIC.sayIsAvailable) return;
   const filename = `${STATIC.cacheFolder}/${parseInt(Math.random() * 99999999, 10).toString(16)}.wav`;
+  debug('Writing audio...');
   shelljs.exec(`say --data-format=LEF32@8000 -r ${rate} -o ${filename} "${message}"`, { async: true }, () => {
+    debug('Completed writing audio');
     const readStream = fs.createReadStream(filename);
     readStream.resume();
-    console.log(clients);
     (recipient ? [recipient] : clients).forEach((client) => {
       const stream = ss.createStream();
-      // Emitting...
       ss(client).emit('audio-stream', stream, { name: filename });
       readStream.pipe(stream);
     });
   });
 };
 
+let dataTimeout = false;
+
+setTimeout(() => info(`Clients connected: ${clients.length}`), 500);
+
 const fetchData = (useOld = false) => {
+  clearTimeout(dataTimeout);
+  debug('Fetching data...');
   if (!clients.length) {
-    return console.log('No clients are connected!');
+    return debug('No clients are connected!');
   }
   const error = (err) => {
     transmitAudio(err);
@@ -84,7 +91,7 @@ const fetchData = (useOld = false) => {
         const diff = Math.round(parseFloat(oldData[index].l) * 100) - (parseFloat(ticker.l) * 100);
         const direction = diff < 0 ? 'up' : 'down';
         const unit = Math.abs(diff) > 1 ? 'cents' : 'cent';
-        console.log(`${(new Date().getTime())} - ${ticker.t}: ${oldData[index].l} > ${ticker.l}`);
+        info(`${ticker.t}: ${oldData[index].l} > ${ticker.l}`);
         phrases.push(`${ticker.t} is ${direction} ${Math.abs(diff) >= 1 ? Math.abs(diff) : 'less than one'} ${unit} to ${ticker.l}`);
       }
     });
@@ -95,7 +102,7 @@ const fetchData = (useOld = false) => {
       transmitAudio(phrases.join(', '), 220);
     }
     oldData = data;
-    setTimeout(fetchData, STATIC.fetchTimeout);
+    dataTimeout = setTimeout(fetchData, STATIC.fetchTimeout);
     return this;
   });
   return this;
@@ -104,18 +111,20 @@ const fetchData = (useOld = false) => {
 io.on('connection', (client) => {
   clients.push(client);
   client.on('disconnect', () => {
-    console.log('Client has disconnected');
+    debug(`Client ${client.id} has disconnected`);
     clients.splice(clients.indexOf(client), 1);
   });
+  client.on('audio:received', () => debug(`Client ${client.id} recieved audio`));
+  client.on('audio:playing', () => debug(`Client ${client.id} is playing audio`));
   // transmitAudio(STATIC.welcomeMessage, 180, client);
-  console.log(`Client length: ${clients.length}`);
+  debug(`Clients connected: ${clients.length}`);
   // First one here; start the data fetching process.
-  if (clients.length === 1) {
+  if (clients.length < 2) {
     fetchData(true);
   }
 });
 
 server.listen(STATIC.port, () => {
-  console.log(`Started the Talking Stock on port ${STATIC.port}`);
-  (new Cli(fetch)).init();
+  info(`Started the Talking Stock on port ${STATIC.port}`);
+  // new Cli(fetch)).init();
 });

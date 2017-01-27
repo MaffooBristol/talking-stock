@@ -31,17 +31,18 @@ var context;
 try {
   window.AudioContext = window.AudioContext || window.webkitAudioContext;
   context = new window.AudioContext();
-} catch (e) {
+}
+catch (e) {
   alert("No Web Audio API support");
 }
 
-ss(socket).on('audio-stream', function(stream, data) {
+ss(socket).on('audio-stream', function (stream, data) {
   parts = [];
-  stream.on('data', function(chunk){
+  stream.on('data', function (chunk) {
     parts.push(chunk);
   });
   stream.on('end', function () {
-    try {
+    socket.emit('audio:received');
     var fileReader = new FileReader();
     fileReader.onload = function() {
       var arrayBuffer = this.result;
@@ -50,11 +51,9 @@ ss(socket).on('audio-stream', function(stream, data) {
         source.buffer = buffer;
         source.connect(context.destination);
         source.start(0);
+        socket.emit('audio:playing');
       });
     };
     fileReader.readAsArrayBuffer(new Blob(parts));
-    } catch (e) {
-      alert(e);
-    }
   });
 });
