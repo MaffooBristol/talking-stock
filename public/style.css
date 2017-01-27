@@ -1,0 +1,53 @@
+body {
+  background: #222;
+  color: #0f0;
+  font-family: monospace;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#container {
+  position: relative;
+}
+#status {
+  position: absolute;
+  top: -1.5em;
+  right: 0.3em;
+  text-align: right;
+  color: #34f;
+  opacity: 0.4;
+  transition: 0.2s linear opacity;
+  font-size: 2em;
+}
+#container.loading #status {
+  display: none;
+}
+#status.disconnected {
+  color: #f33;
+  opacity: 1;
+}
+#status.updated {
+  opacity: 1;
+}
+#ticker table {
+  font-size: 1.5em;
+}
+#ticker td {
+  font-size: 1.3em;
+  padding: 0.1em 0.3em;
+  transition: 0.3s linear color;
+}
+#ticker td.price, #ticker td.movement {
+  text-align: right;
+}
+#ticker td.price.updated {
+  background: #0f0;
+  color: white;
+}
+#ticker td.movement {
+  font-size: 1.1em;
+}
+#ticker td.movement.down {
+  color: #f33;
+}

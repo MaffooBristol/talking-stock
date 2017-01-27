@@ -1,0 +1,4 @@
+extends: airbnb
+rules:
+  space-before-function-paren: off
+  brace-style: [2, "stroustrup"]
