@@ -52,8 +52,10 @@ const transmitAudio = (message = 'Undefined message', rate = 200, recipient = fa
   shelljs.exec(`say --data-format=LEF32@8000 -r ${rate} -o ${filename} "${message}"`, { async: true }, () => {
     const readStream = fs.createReadStream(filename);
     readStream.resume();
+    console.log(clients);
     (recipient ? [recipient] : clients).forEach((client) => {
       const stream = ss.createStream();
+      // Emitting...
       ss(client).emit('audio-stream', stream, { name: filename });
       readStream.pipe(stream);
     });
@@ -78,6 +80,7 @@ const fetchData = (useOld = false) => {
         updated = true;
       }
       else if (parseFloat(oldData[index].l) !== parseFloat(ticker.l)) {
+        updated = true;
         const diff = Math.round(parseFloat(oldData[index].l) * 100) - (parseFloat(ticker.l) * 100);
         const direction = diff < 0 ? 'up' : 'down';
         const unit = Math.abs(diff) > 1 ? 'cents' : 'cent';
