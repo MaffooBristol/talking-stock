@@ -1,10 +1,8 @@
 const shelljs = require('shelljs');
-const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
-const ss = require('socket.io-stream');
 const debug = require('debug')('talking-stock:debug');
 const info = require('debug')('talking-stock:info');
 
@@ -12,8 +10,10 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
-const Fetch = require('./fetch');
-// const Cli = require('./cli');
+const Clients = require('./src/clients');
+const Fetch = require('./src/fetch');
+const Audio = require('./src/audio');
+// const Cli = require('./src/cli');
 
 const defaultSymbols = [
   'NASDAQ:AMD',
@@ -26,9 +26,11 @@ const defaultSymbols = [
   'NASDAQ:XGTI',
 ];
 
+const clients = new Clients();
 const fetch = new Fetch({ defaultSymbols });
+const audio = new Audio({ clients });
 
-const STATIC = {
+global.static = {
   welcomeMessage: 'Welcome to the talking stock! Please stay tuned bro!',
   port: 4567,
   fetchTimeout: 15000,
@@ -39,43 +41,18 @@ const STATIC = {
 
 app.use(express.static(path.join(__dirname, '/public')));
 
-const clients = [];
 let oldData = null;
-
-// This could be async but meh, for what it's worth.
-if (!fs.existsSync(STATIC.cacheFolder)) {
-  fs.mkdirSync(STATIC.cacheFolder);
-}
-
-const transmitAudio = (message = 'Undefined message', rate = 200, recipient = false) => {
-  if (!STATIC.sayIsAvailable) return;
-  const filename = `${STATIC.cacheFolder}/${parseInt(Math.random() * 99999999, 10).toString(16)}.wav`;
-  debug('Writing audio...');
-  shelljs.exec(`say --data-format=LEF32@8000 -r ${rate} -o ${filename} "${message}"`, { async: true }, () => {
-    debug('Completed writing audio');
-    const readStream = fs.createReadStream(filename);
-    readStream.resume();
-    (recipient ? [recipient] : clients).forEach((client) => {
-      const stream = ss.createStream();
-      ss(client).emit('audio-stream', stream, { name: filename });
-      readStream.pipe(stream);
-    });
-  });
-};
-
 let dataTimeout = false;
-
-setTimeout(() => info(`Clients connected: ${clients.length}`), 500);
 
 const fetchData = (useOld = false) => {
   clearTimeout(dataTimeout);
   debug('Fetching data...');
-  if (!clients.length) {
+  if (!clients.length()) {
     return debug('No clients are connected!');
   }
   const error = (err) => {
-    transmitAudio(err);
-    setTimeout(fetchData, STATIC.fetchErrorTimeout);
+    audio.transmit(err);
+    setTimeout(fetchData, global.static.fetchErrorTimeout);
   };
   fetch.request((err, data) => {
     if (err) return error(err);
@@ -99,32 +76,32 @@ const fetchData = (useOld = false) => {
       io.emit('tick', (useOld && oldData ? oldData : data));
     }
     if (updated) {
-      transmitAudio(phrases.join(', '), 220);
+      audio.transmit(phrases.join(', '), 220);
     }
     oldData = data;
-    dataTimeout = setTimeout(fetchData, STATIC.fetchTimeout);
+    dataTimeout = setTimeout(fetchData, global.static.fetchTimeout);
     return this;
   });
   return this;
 };
 
 io.on('connection', (client) => {
-  clients.push(client);
+  clients.addClient(client);
   client.on('disconnect', () => {
     debug(`Client ${client.id} has disconnected`);
-    clients.splice(clients.indexOf(client), 1);
+    clients.removeClient(client);
   });
   client.on('audio:received', () => debug(`Client ${client.id} recieved audio`));
   client.on('audio:playing', () => debug(`Client ${client.id} is playing audio`));
-  // transmitAudio(STATIC.welcomeMessage, 180, client);
-  debug(`Clients connected: ${clients.length}`);
+  // audio.transmit(global.static.welcomeMessage, 180);
+  debug(`Clients connected: ${clients.length()}`);
   // First one here; start the data fetching process.
-  if (clients.length < 2) {
+  if (clients.length() < 2) {
     fetchData(true);
   }
 });
 
-server.listen(STATIC.port, () => {
-  info(`Started the Talking Stock on port ${STATIC.port}`);
+server.listen(global.static.port, () => {
+  info(`Started the Talking Stock on port ${global.static.port}`);
   // new Cli(fetch)).init();
 });
