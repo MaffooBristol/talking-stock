@@ -22,7 +22,7 @@ const defaultSymbols = [
   'NYSEMKT:MSTX',
   'NASDAQ:NVDA',
   'NASDAQ:SPHS',
-  'NASDAQ:STX',
+  // 'NASDAQ:STX',
   'NASDAQ:XGTI',
 ];
 
@@ -35,8 +35,13 @@ global.static = {
   port: 4567,
   fetchTimeout: 15000,
   fetchErrorTimeout: 60000,
+  speechSpeed: 220,
   cacheFolder: `${__dirname}/_cache`,
   sayIsAvailable: shelljs.which('say'),
+  phraseOpts: {
+    priceDiffs: false,
+    dayDiff: false,
+  },
 };
 
 app.use(express.static(path.join(__dirname, '/public')));
@@ -69,14 +74,21 @@ const fetchData = (useOld = false) => {
         const direction = diff < 0 ? 'up' : 'down';
         const unit = Math.abs(diff) > 1 ? 'cents' : 'cent';
         info(`${ticker.t}: ${oldData[index].l} > ${ticker.l}`);
-        phrases.push(`${ticker.t} is ${direction} ${Math.abs(diff) >= 1 ? Math.abs(diff) : 'less than one'} ${unit} to ${ticker.l}`);
+        if (global.static.phraseOpts.priceDiffs) {
+          phrases.push(`${ticker.t} is ${direction} ${Math.abs(diff) >= 1 ? Math.abs(diff) : 'less than one'} ${unit} to ${ticker.l}`);
+        }
       }
     });
+    const dayDifference = `Day difference: ${Math.round(data.reduce((a, m) => (a + parseFloat(m.cp)), 0) * 100) / 100}%`;
+    if (global.static.phraseOpts.dayDiff) {
+      phrases.push(dayDifference);
+    }
+    info(dayDifference);
     if (updated || useOld) {
       io.emit('tick', (useOld && oldData ? oldData : data));
     }
-    if (updated) {
-      audio.transmit(phrases.join(', '), 220);
+    if (updated && phrases.length) {
+      audio.transmit(phrases.join(', '), global.static.speechSpeed);
     }
     oldData = data;
     dataTimeout = setTimeout(fetchData, global.static.fetchTimeout);
